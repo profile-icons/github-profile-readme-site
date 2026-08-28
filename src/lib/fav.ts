@@ -20,9 +20,7 @@ function createFavUrl(imgUrl: string): string {
       />
     </svg>
   `.trim();
-  return (
-    "data:image/svg+xml;base64," + Buffer.from(svg, "utf8").toString("base64")
-  );
+  return `data:image/svg+xml;base64,${Buffer.from(svg, "utf8").toString("base64")}`;
 }
 
 export async function fetchAvatar(
@@ -45,11 +43,11 @@ export async function fetchAvatar(
       return undefined;
     }
 
-    const encodedImage: string = Buffer.from(
+    const encodedImg: string = Buffer.from(
       new Uint8Array(await res.arrayBuffer()),
     ).toString("base64");
 
-    return createFavUrl(`data:${contentType};base64,${encodedImage}`);
+    return createFavUrl(`data:${contentType};base64,${encodedImg}`);
   } catch {
     return undefined;
   }

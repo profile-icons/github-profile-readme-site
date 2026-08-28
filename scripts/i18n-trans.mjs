@@ -1,30 +1,51 @@
-import emojiRegex from "emoji-regex";
 import { createHash } from "node:crypto";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { transHTML } from "./i18n-profile.mjs";
+import emojiRegex from "emoji-regex";
 import { fetchReadMe } from "../src/lib/gh.ts";
+import { transHTML } from "./i18n-profile.mjs";
+import { assertModel, HF_MODEL } from "./i18n-setup.mjs";
 
 const PATTERN_MODEL_TXT = /[\p{L}\p{N}]/u;
-const DEFAULT_TAB_SUFFIX = "GitHub Profile";
+const TAB_SUFFIX = "GitHub Profile";
 
 const GEN_DIR = resolve(
   process.cwd(),
   process.env.I18N_OUTPUT_DIR?.trim() || "src/gen/i18n",
 );
-const MODEL_ID = process.env.HF_TRANS_MODEL?.trim() || "Xenova/m2m100_418M";
+const PUB_DIR = resolve(
+  process.cwd(),
+  process.env.I18N_PUBLIC_DIR?.trim() || "public/i18n",
+);
+const MODEL_ID = process.env.HF_TRANS_MODEL?.trim() || HF_MODEL;
 const MODEL_DTYPE = process.env.HF_TRANS_DTYPE?.trim() || "q8";
 const MODEL_TASK = process.env.HF_TRANS_TASK?.trim() || "translation";
 const MODEL_CACHE_DIR = resolve(
   process.cwd(),
   process.env.HF_TRANSFORMERS_CACHE?.trim() || ".cache/huggingface",
 );
+const MODEL_LOCALE_MAP = Object.freeze(
+  JSON.parse(
+    await readFile(new URL("../src/locales.json", import.meta.url), "utf8"),
+  ),
+);
+const MODEL_LOCALE_IDX = new Map(
+  Object.entries(MODEL_LOCALE_MAP).map(([locale, modelLocale]) => [
+    localeNorm(locale).toLowerCase(),
+    modelLocale,
+  ]),
+);
+const MODEL_LOCALE_MAP_HASH = createHash("sha256")
+  .update(JSON.stringify(MODEL_LOCALE_MAP))
+  .digest("hex")
+  .slice(0, 16);
 const MODEL_META = Object.freeze({
   provider: "transformers.js",
   model: MODEL_ID,
   dtype: MODEL_DTYPE,
   task: MODEL_TASK,
   emoji: "preserve",
+  localeMap: MODEL_LOCALE_MAP_HASH,
 });
 
 const MAX_SEG_CHARS = Math.max(
@@ -136,7 +157,19 @@ function splitTxt(str) {
 }
 
 function langModel(locale) {
-  return localeNorm(locale).toLowerCase().split("-")[0];
+  let candidateLocale = localeNorm(locale).toLowerCase();
+  while (candidateLocale) {
+    const modelLocale = MODEL_LOCALE_IDX.get(candidateLocale);
+    if (typeof modelLocale === "string" && modelLocale) return modelLocale;
+
+    const splitAt = candidateLocale.lastIndexOf("-");
+    if (splitAt < 0) break;
+    candidateLocale = candidateLocale.slice(0, splitAt);
+  }
+
+  throw new Error(
+    `Unsupported translation locale: ${locale}. Use a locale key from src/i18n-locales.json.`,
+  );
 }
 
 function isWordsRepeat(value) {
@@ -291,8 +324,22 @@ class TransHF {
           );
         }
 
-        transformers.env.cacheDir = MODEL_CACHE_DIR;
-        console.log(`Loading ${MODEL_ID} (${MODEL_DTYPE}, ${MODEL_TASK})...`);
+        if (MODEL_ID === HF_MODEL && MODEL_DTYPE === "q8") {
+          transformers.env.localModelPath = await assertModel({
+            modelId: MODEL_ID,
+          });
+          transformers.env.allowLocalModels = true;
+          transformers.env.allowRemoteModels = false;
+          console.log(
+            `Loading ${MODEL_ID} locally (${MODEL_DTYPE}, ${MODEL_TASK})...`,
+          );
+        } else {
+          transformers.env.cacheDir = MODEL_CACHE_DIR;
+          transformers.env.allowLocalModels = true;
+          transformers.env.allowRemoteModels = true;
+          console.log(`Loading ${MODEL_ID} (${MODEL_DTYPE}, ${MODEL_TASK})...`);
+        }
+
         return transformers.pipeline(MODEL_TASK, MODEL_ID, {
           dtype: MODEL_DTYPE,
         });
@@ -337,7 +384,7 @@ class TransHF {
     }
 
     console.warn(
-      `Rejected ${this.langSrc} -> ${langModel(locale)} translation (${isValidReason}): ${src.replace(/\s+/gu, " ").slice(0, 80)}`,
+      `Rejected ${this.localeSrc} -> ${localeNorm(locale)} translation (${isValidReason}): ${src.replace(/\s+/gu, " ").slice(0, 80)}`,
     );
     return src;
   }
@@ -469,7 +516,8 @@ function isCurTrans(existing, { locale, localeSrc, srcHash }) {
     existing?.generator?.model === MODEL_META.model &&
     existing?.generator?.dtype === MODEL_META.dtype &&
     existing?.generator?.task === MODEL_META.task &&
-    existing?.generator?.emoji === MODEL_META.emoji
+    existing?.generator?.emoji === MODEL_META.emoji &&
+    existing?.generator?.localeMap === MODEL_META.localeMap
   );
 }
 
@@ -488,6 +536,50 @@ function writeJson(path, data) {
   return writeFile(path, `${JSON.stringify(data, null, 2)}\n`, "utf8");
 }
 
+function pubLocalePath(locale) {
+  return resolve(PUB_DIR, `${locale}.json`);
+}
+
+function trans(conf, gen) {
+  if (
+    !gen ||
+    typeof gen !== "object" ||
+    typeof gen.locale !== "string" ||
+    typeof gen.tagline !== "string" ||
+    !gen.readme ||
+    typeof gen.readme.html !== "string"
+  ) {
+    throw new Error(
+      `Generated translation for ${String(gen?.locale ?? "unknown")} is invalid.`,
+    );
+  }
+
+  return {
+    locale: gen.locale,
+    title: `${String(conf.tabName || conf.githubName || "").trim()} — ${String(gen?.tabSuffix || TAB_SUFFIX)}`,
+    tagline: gen.tagline,
+    readmeHTML: gen.readme.html,
+  };
+}
+
+async function pubTrans(locales, conf) {
+  await rm(PUB_DIR, { recursive: true, force: true });
+  if (locales.length <= 1) return;
+
+  await mkdir(PUB_DIR, { recursive: true });
+  await Promise.all(
+    locales.map(async (locale) => {
+      const gen = await readJson(genPath(locale));
+      if (!gen) {
+        throw new Error(
+          `Missing generated translation for ${locale}. Run: npm run i18n.`,
+        );
+      }
+      await writeJson(pubLocalePath(locale), trans(conf, gen));
+    }),
+  );
+}
+
 async function main() {
   const conf = await readJson(resolve(process.cwd(), "site.config.json"));
   if (!conf || typeof conf !== "object") {
@@ -501,7 +593,7 @@ async function main() {
   const username = String(conf.githubName ?? "").trim();
   const repoName = String(conf.repoName ?? "").trim();
   const tagline = String(conf.tagline ?? "");
-  const tabSuffix = String(conf.tabSuffix ?? "").trim() || DEFAULT_TAB_SUFFIX;
+  const tabSuffix = String(conf.tabSuffix ?? "").trim() || TAB_SUFFIX;
   let readme = await fetchReadMe(username, repoName);
   if (!readme.isSuccess) {
     const prevSrc = await readJson(genPath(localeSrc));
@@ -532,6 +624,11 @@ async function main() {
   });
 
   const targetLocales = locales.filter((locale) => locale !== localeSrc);
+  if (targetLocales.length) {
+    langModel(localeSrc);
+    for (const locale of targetLocales) langModel(locale);
+  }
+
   const currentTranslations = await Promise.all(
     targetLocales.map(async (locale) =>
       isCurTrans(await readJson(genPath(locale)), {
@@ -545,6 +642,7 @@ async function main() {
     (_locale, index) => !currentTranslations[index],
   );
   if (!localesStale.length) {
+    await pubTrans(locales, conf);
     console.log("Translations are up to date.");
     return;
   }
@@ -577,6 +675,8 @@ async function main() {
   } finally {
     await transHF.dispose();
   }
+
+  await pubTrans(locales, conf);
   console.log("Profile translations complete.");
 }
 

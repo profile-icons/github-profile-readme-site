@@ -1,0 +1,47 @@
+<button
+  id="i18n-toggle"
+  type="button"
+  class="i18n-toggle"
+  aria-label="Switch language"
+>
+  <svg
+    class="i18n-toggle-icon"
+    viewBox="0 0 24 24"
+    width="20"
+    height="20"
+    aria-hidden="true"
+  >
+    <circle cx="12" cy="12" r="9"></circle>
+    <path
+      d="M3 12h18M12 3a14.5 14.5 0 0 1 0 18M12 3a14.5 14.5 0 0 0 0 18"
+    ></path>
+  </svg>
+
+  <span class="i18n-toggle-tooltip" aria-hidden="true">
+    <span data-i18n-tooltip-locale></span>
+  </span>
+</button>
+
+<script>
+const button: HTMLElement | null = document.getElementById("i18n-toggle");
+const root: HTMLElement = document.documentElement;
+
+if (button instanceof HTMLButtonElement) {
+  const tooltipLocale: HTMLElement | null = button.querySelector(
+    "[data-i18n-tooltip-locale]",
+  );
+
+  const syncLabel = (): void => {
+    const locale: string = root.dataset.locale || root.lang || "";
+    const cur: string = locale ? ` Current language: ${locale}.` : "";
+    button.setAttribute("aria-label", `Switch language.${cur}`);
+    if (tooltipLocale) tooltipLocale.textContent = locale || "—";
+  };
+
+  syncLabel();
+  button.addEventListener("click", (): void => {
+    window.dispatchEvent(new Event("i18n-toggle"));
+  });
+  window.addEventListener("i18n-toggle-readme", syncLabel);
+}
+</script>

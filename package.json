@@ -11,13 +11,14 @@
     "dev": "npm run i18n && astro dev",
     "build": "npm run i18n && astro build",
     "preview": "astro preview",
-    "check": "astro check",
-    "lint": "eslint \"src/**/*.{astro,js,ts}\" \"*.{js,mjs}\"",
-    "lint:fix": "eslint \"src/**/*.{astro,js,ts}\" \"*.{js,mjs}\" --fix",
-    "format": "prettier . --write",
-    "format:check": "prettier . --check",
-    "quality": "npm run check && npm run lint && npm run format:check",
-    "quality:fix": "npm run lint:fix && npm run format && npm run check"
+    "lint": "biome lint .",
+    "lint:fix": "biome lint --write .",
+    "format": "biome format --write .",
+    "format:check": "biome format .",
+    "biome:check": "biome check .",
+    "biome:fix": "biome check --write .",
+    "quality": "biome check . && astro check",
+    "quality:fix": "biome check --write . && astro check"
   },
   "overrides": {
     "adm-zip": "0.6.0",
@@ -26,27 +27,20 @@
   "dependencies": {
     "@astrojs/sitemap": "^3.7.3",
     "@huggingface/transformers": "^4.2.0",
-    "astro": "^7.1.6",
+    "astro": "^7.2.9",
     "bootstrap-icons": "^1.13.1",
     "clean": "^4.0.2",
     "emoji-regex": "^10.6.0",
-    "marked": "^18.0.9",
+    "marked": "^18.0.11",
     "simple-icons": "^16.28.0"
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.10",
-    "@eslint/js": "^10.0.1",
+    "@biomejs/biome": "^2.5.11",
     "@tailwindcss/typography": "^0.5.20",
     "@tailwindcss/vite": "^4.3.3",
-    "eslint": "^10.8.0",
-    "eslint-config-prettier": "^10.1.8",
-    "eslint-plugin-astro": "^3.0.1",
-    "globals": "^17.9.0",
-    "prettier": "^3.9.6",
-    "prettier-plugin-astro": "^0.14.1",
-    "prettier-plugin-tailwindcss": "^0.8.1",
+    "globals": "^17.11.0",
     "tailwindcss": "^4.3.3",
-    "typescript": "^6.0.0",
-    "typescript-eslint": "^8.66.0"
+    "typescript": "^6.0.3"
   }
 }

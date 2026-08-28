@@ -8,10 +8,9 @@ export interface ReadmeMD {
 }
 
 interface Profile {
-  version: number;
   locale: string;
   localeSrc: string;
-  sourceHash: string;
+  srcHash: string;
   tabSuffix: string;
   tagline: string;
   readme: ReadmeMD;
@@ -31,21 +30,45 @@ const genDir: string = resolve(
 );
 const profileTrans = new Map<string, Promise<ProfileTrans>>();
 
+function localeNorm(locale: string): string {
+  return String(locale ?? "")
+    .trim()
+    .replaceAll("_", "-");
+}
+
+function localeKey(locale: string): string {
+  const norm: string = localeNorm(locale);
+  if (!/^[a-z]{2,3}(?:-[a-z0-9]{2,8})*$/i.test(norm)) {
+    throw new Error(`Invalid locale: ${locale}`);
+  }
+  return norm;
+}
+
 async function readGenDoc(locale: string): Promise<Profile> {
+  const norm: string = localeKey(locale);
   const path: string = resolve(genDir, `${locale}.json`);
 
   try {
     const parsed: unknown = JSON.parse(await readFile(path, "utf8"));
+    if (!parsed || typeof parsed !== "object") {
+      throw new Error(`Generated translation file is invalid: ${path}`);
+    }
+
+    const profile = parsed as Partial<Profile>;
     if (
-      !parsed ||
-      typeof parsed !== "object" ||
-      !("tabSuffix" in parsed) ||
-      !("tagline" in parsed) ||
-      !("readme" in parsed)
+      typeof profile.locale !== "string" ||
+      typeof profile.localeSrc !== "string" ||
+      typeof profile.srcHash !== "string" ||
+      typeof profile.tabSuffix !== "string" ||
+      typeof profile.tagline !== "string" ||
+      !profile.readme ||
+      typeof profile.readme !== "object" ||
+      typeof profile.readme.html !== "string" ||
+      typeof profile.readme.isSuccess !== "boolean"
     ) {
       throw new Error(`Generated translation file is invalid: ${path}`);
     }
-    return parsed as Profile;
+    return profile as Profile;
   } catch (error) {
     if (
       error instanceof Error &&
@@ -53,7 +76,7 @@ async function readGenDoc(locale: string): Promise<Profile> {
       (error as NodeJS.ErrnoException).code === "ENOENT"
     ) {
       throw new Error(
-        `Missing profile content for ${locale}. Run: npm run i18n.`,
+        `Missing profile content for ${norm}. Run: npm run i18n.`,
         { cause: error },
       );
     }
@@ -62,10 +85,11 @@ async function readGenDoc(locale: string): Promise<Profile> {
 }
 
 export function getTranslations(locale: string): Promise<ProfileTrans> {
-  const cached: Promise<ProfileTrans> | undefined = profileTrans.get(locale);
+  const norm: string = localeKey(locale);
+  const cached: Promise<ProfileTrans> | undefined = profileTrans.get(norm);
   if (cached) return cached;
 
-  const content: Promise<ProfileTrans> = readGenDoc(locale).then(
+  const content: Promise<ProfileTrans> = readGenDoc(norm).then(
     (gen: Profile): ProfileTrans => ({
       title:
         `${siteConfig.tabName || siteConfig.githubName}` +
@@ -74,6 +98,7 @@ export function getTranslations(locale: string): Promise<ProfileTrans> {
       readme: gen.readme,
     }),
   );
-  profileTrans.set(locale, content);
+
+  profileTrans.set(norm, content);
   return content;
 }

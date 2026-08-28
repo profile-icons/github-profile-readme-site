@@ -8,8 +8,7 @@ interface Props {
 const { links }: { links: IconLink[] } = Astro.props;
 ---
 
-{
-  links.length > 0 && (
+{links.length > 0 && (
     <nav class="profile-links" aria-label="Profile links">
       {links.map((link: IconLink) => (
         <a
@@ -80,5 +79,4 @@ const { links }: { links: IconLink[] } = Astro.props;
         </a>
       ))}
     </nav>
-  )
-}
+  )}

@@ -9,7 +9,10 @@ export interface SiteConfig {
   tabName?: string;
   tabSuffix?: string;
   description: string;
-  themeCol: string;
+  theme: string;
+  themeColor?: string;
+  style?: string;
+  organizations?: string[];
   language: string;
   locales?: string[];
   links: Record<string, string>;

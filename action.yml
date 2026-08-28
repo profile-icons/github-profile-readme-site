@@ -9,8 +9,13 @@ branding:
 inputs:
   config-path:
     description: "Path to the `site.config.json` file"
-    required: true
+    required: false
     default: "site.config.json"
+
+  hf-token:
+    description: "Hugging Face token for authenticated model downloads"
+    required: false
+    default: ""
 
 outputs:
   dist-path:
@@ -20,35 +25,57 @@ outputs:
 runs:
   using: "composite"
   steps:
-    - name: Setup
-      uses: actions/setup-node@v7
-      with:
-        node-version: "24"
-
-    - name: Prepare
+    - name: Init
       shell: bash
       run: |
         BUILD_DIR="$RUNNER_TEMP/github-profile-readme-site"
+        CONFIG_PATH="${{ github.workspace }}/${{ inputs.config-path }}"
+
+        if [[ ! -f "$CONFIG_PATH" ]]; then
+          echo "::error::Config file not found: $CONFIG_PATH"
+          exit 1
+        fi
+
         rm -rf "$BUILD_DIR"
         mkdir -p "$BUILD_DIR"
 
         cp -R "$GITHUB_ACTION_PATH/." "$BUILD_DIR/"
-        cp "${{ github.workspace }}/${{ inputs.config-path }}" \
-           "$BUILD_DIR/site.config.json"
+        cp "$CONFIG_PATH" "$BUILD_DIR/site.config.json"
 
-        echo "BUILD_DIR=$BUILD_DIR" >> "$GITHUB_ENV"
+    - name: Setup
+      uses: actions/setup-node@v7
+      with:
+        node-version: 24
+        cache: npm
+        cache-dependency-path: ${{ runner.temp }}/github-profile-readme-site/package-lock.json
+
+    - name: Cache
+      uses: actions/cache@v6
+      with:
+        path: |
+          ${{ runner.temp }}/github-profile-readme-site/.models
+          ${{ runner.temp }}/github-profile-readme-site/.cache/huggingface
+        key: hf-nllb-200-distilled-600m-q8-${{ runner.os }}-${{ runner.arch }}-v3
 
     - name: Install
       shell: bash
+      working-directory: ${{ runner.temp }}/github-profile-readme-site
       run: npm ci
-      working-directory: ${{ env.BUILD_DIR }}
+
+    - name: i18n
+      shell: bash
+      working-directory: ${{ runner.temp }}/github-profile-readme-site
+      run: npm run i18n
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
+        HF_TOKEN: ${{ inputs.hf-token }}
 
     - name: Build
       id: build
       shell: bash
+      working-directory: ${{ runner.temp }}/github-profile-readme-site
       run: |
-        npm run build
-        echo "dist-path=$BUILD_DIR/dist" >> "$GITHUB_OUTPUT"
-      working-directory: ${{ env.BUILD_DIR }}
+        npm exec -- astro build
+        echo "dist-path=$RUNNER_TEMP/github-profile-readme-site/dist" >> "$GITHUB_OUTPUT"
       env:
         GITHUB_TOKEN: ${{ github.token }}

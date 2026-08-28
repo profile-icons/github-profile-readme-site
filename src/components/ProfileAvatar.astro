@@ -25,15 +25,13 @@ const { imageUrl, profileUrl, tabName, tagline } = Astro.props;
         loading="eager"
         fetchpriority="high"
         class="size-32 rounded-full border border-slate-200 bg-white object-cover shadow-xl shadow-slate-950/10 transition duration-200 group-hover:scale-[1.03] group-focus-visible:scale-[1.03] sm:size-40 dark:border-slate-700 dark:bg-slate-900"
-      />
+      >
     </a>
   </div>
 
-  {
-    tagline && (
+  {tagline && (
       <p class="profile-tagline" data-i18n-tagline>
         {tagline?.trim()}
       </p>
-    )
-  }
+    )}
 </div>

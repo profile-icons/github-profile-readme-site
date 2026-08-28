@@ -1,0 +1,18 @@
+{
+  "aurora": {
+    "bg": "radial-gradient(circle at 12% 8%, rgb(56 189 248 / 0.16), transparent 28rem), radial-gradient(circle at 88% 18%, rgb(168 85 247 / 0.14), transparent 30rem), radial-gradient(circle at 50% 95%, rgb(34 197 94 / 0.10), transparent 28rem), var(--page-background)"
+  },
+  "gradient": {
+    "bg": "linear-gradient(135deg, color-mix(in srgb, var(--page-background) 72%, white) 0%, var(--page-background) 50%, color-mix(in srgb, var(--page-background) 80%, black) 100%)"
+  },
+  "grid": {
+    "bg": "linear-gradient(var(--details-border) 1px, transparent 1px), linear-gradient(90deg, var(--details-border) 1px, transparent 1px), var(--page-background)",
+    "bgSize": "32px 32px"
+  },
+  "glow": {
+    "bg": "radial-gradient(circle at top, var(--page-glow), transparent 28rem), var(--page-background)"
+  },
+  "solid": {
+    "bg": "var(--page-background)"
+  }
+}

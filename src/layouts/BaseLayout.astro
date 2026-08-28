@@ -1,5 +1,15 @@
 ---
 import "../style.css";
+import { resolveStyle, styleCSS } from "../lib/style";
+import {
+  resolveTheme,
+  resolveThemeColor,
+  themeAccentCSS,
+  themeBG,
+  themeColorCSS,
+  themeColorTone,
+  themeCSS,
+} from "../lib/theme";
 
 interface TransClient {
   locale: string;
@@ -15,11 +25,14 @@ interface Props {
   imageUrl?: string;
   imageAlt?: string;
   language?: string;
-  themeCol?: string;
+  theme?: string;
+  themeColor?: string;
+  style?: string;
   data?: Record<string, unknown>;
   favUrl?: string;
   noindex?: boolean;
-  translations?: TransClient[];
+  locales?: string[];
+  srcTrans?: TransClient;
   defLanguage?: string;
 }
 
@@ -30,239 +43,803 @@ const {
   imageUrl,
   imageAlt,
   language = "en",
-  themeCol,
+  theme,
+  themeColor,
+  style,
   data,
   favUrl,
   noindex = false,
-  translations = [],
+  locales = [],
+  srcTrans,
   defLanguage = language,
 } = Astro.props;
 
 const baseUrl: string | undefined = url?.href;
+const themeSelection = resolveTheme(theme);
+const resolvedThemeColor: string | undefined = resolveThemeColor(themeColor);
+const styleSelection = resolveStyle(style);
+const fixedThemeColor: string | undefined =
+  themeSelection.type === "default" ? resolvedThemeColor : undefined;
+const accentThemeColor: string | undefined =
+  themeSelection.type === "name" ? resolvedThemeColor : undefined;
+const fixedThemeTone: "light" | "dark" | undefined = fixedThemeColor
+  ? themeColorTone(fixedThemeColor)
+  : undefined;
+const selectedThemeName: string | undefined =
+  themeSelection.type === "name" ? themeSelection.name : undefined;
+const selectedStyleName: string | undefined =
+  styleSelection.type === "named" ? styleSelection.name : undefined;
+const themeCss: string | undefined =
+  themeSelection.type === "name"
+    ? themeCSS(themeSelection.name, themeSelection.light, themeSelection.dark)
+    : undefined;
+const themeColorInlineCss: string | undefined =
+  fixedThemeColor && fixedThemeTone
+    ? themeColorCSS(fixedThemeColor, fixedThemeTone, !selectedStyleName)
+    : accentThemeColor
+      ? themeAccentCSS(accentThemeColor)
+      : undefined;
+const themeStyleCss: string | undefined =
+  styleSelection.type === "named"
+    ? styleCSS(styleSelection.name, styleSelection.style)
+    : undefined;
+const lightThemeColor: string | undefined =
+  resolvedThemeColor ??
+  (themeSelection.type === "name" ? themeBG(themeSelection.light) : undefined);
+const darkThemeColor: string | undefined =
+  resolvedThemeColor ??
+  (themeSelection.type === "name" ? themeBG(themeSelection.dark) : undefined);
 const jsonLd: string | undefined = data
   ? JSON.stringify(data).replace(/</g, "\\u003c")
   : undefined;
+const transBase: string = `${import.meta.env.BASE_URL.replace(/\/?$/, "/")}i18n/`;
 const i18n: string | undefined =
-  translations.length > 1
-    ? JSON.stringify({ defLanguage, translations }).replace(/</g, "\\u003c")
+  locales.length > 1 && srcTrans
+    ? JSON.stringify({
+        defLanguage,
+        locales,
+        source: srcTrans,
+        transBase,
+      }).replace(/</g, "\\u003c")
     : undefined;
 ---
 
 <!doctype html>
-<html lang={language}>
+<html
+  lang={language}
+  data-site-theme={selectedThemeName}
+  data-theme-color={resolvedThemeColor}
+  data-theme-style={selectedStyleName}
+  data-fixed-theme-tone={fixedThemeTone}
+  style={themeColorInlineCss}
+>
   <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="color-scheme" content="light dark" />
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content={fixedThemeTone ?? "light dark"}>
 
-    {themeCol && <meta name="theme-color" content={themeCol} />}
+    {lightThemeColor && (
+      <meta
+          name="theme-color"
+          content={lightThemeColor}
+          data-light={lightThemeColor}
+          data-dark={darkThemeColor ?? lightThemeColor}
+      />
+  )}
 
-    <style is:inline set:html={"html.i18n-pending body { visibility: hidden; }"}
-    ></style>
-
-    {
-      i18n && (
-        <script
+    {themeCss && <style is:inline set:html={themeCss} />}
+    {themeStyleCss && <style is:inline set:html={themeStyleCss} />}
+    {i18n && (
+      <script
           id="i18n-data"
           type="application/json"
           is:inline
           set:html={i18n}
-        />
-      )
-    }
+          />
+  )}
 
     <script is:inline>
-      (() => {
-        const root = document.documentElement;
-        root.classList.add("i18n-pending");
+    (() => {
+      const root = document.documentElement;
+      try {
+        const payloadElement = document.getElementById("i18n-data");
+        if (!payloadElement) return;
+        const payload = JSON.parse(payloadElement.textContent ?? "{}");
+        const localeNorm = (locale) =>
+          String(locale ?? "")
+            .trim()
+            .replaceAll("_", "-")
+            .toLowerCase();
 
-        const relPage = () => root.classList.remove("i18n-pending");
-        const relTimer = window.setTimeout(relPage, 3000);
-
-        try {
-          const payloadElement = document.getElementById("i18n-data");
-          const payload = JSON.parse(payloadElement?.textContent ?? "{}");
-          const localeNorm = (locale) =>
-            String(locale ?? "")
+        const locales = (Array.isArray(payload.locales) ? payload.locales : [])
+          .map((locale) => ({
+            locale: String(locale ?? "")
               .trim()
-              .replaceAll("_", "-")
-              .toLowerCase();
+              .replaceAll("_", "-"),
+            localeNorm: localeNorm(locale),
+          }))
+          .filter(({ localeNorm }) => Boolean(localeNorm));
 
-          const translations = Array.isArray(payload.translations)
-            ? payload.translations
-                .map((translation) => ({
-                  ...translation,
-                  localeNorm: localeNorm(translation?.locale),
-                }))
-                .filter(
-                  (translation) =>
-                    translation.localeNorm &&
-                    typeof translation.title === "string" &&
-                    typeof translation.tagline === "string" &&
-                    typeof translation.readmeHTML === "string",
-                )
-            : [];
-          if (!translations.length) {
-            window.clearTimeout(relTimer);
-            relPage();
-            return;
-          }
+        if (locales.length <= 1) return;
 
-          const localeTrans = new Map(
-            translations.map((translation) => [
-              translation.localeNorm,
-              translation,
-            ]),
-          );
-          const transFB =
-            localeTrans.get(localeNorm(payload.defLanguage)) ?? translations[0];
-
-          const transFind = () => {
-            const browserLocales =
-              Array.isArray(navigator.languages) && navigator.languages.length
-                ? navigator.languages
-                : [navigator.language];
-
-            for (const browserLoc of browserLocales) {
-              const reqLocale = localeNorm(browserLoc);
-              if (!reqLocale) continue;
-
-              const exact = localeTrans.get(reqLocale);
-              if (exact) return exact;
-
-              const localeParts = reqLocale.split("-");
-              for (let len = localeParts.length - 1; len >= 1; len -= 1) {
-                const lessSpecific = localeTrans.get(
-                  localeParts.slice(0, len).join("-"),
-                );
-                if (lessSpecific) return lessSpecific;
+        const localeMap = new Map(
+          locales.map((entry) => [entry.localeNorm, entry]),
+        );
+        const srcRaw = payload.source;
+        const src =
+          srcRaw &&
+          typeof srcRaw === "object" &&
+          typeof srcRaw.locale === "string" &&
+          typeof srcRaw.title === "string" &&
+          typeof srcRaw.tagline === "string" &&
+          typeof srcRaw.readmeHTML === "string"
+            ? {
+                ...srcRaw,
+                localeNorm: localeNorm(srcRaw.locale),
               }
+            : undefined;
 
-              const isTrans = translations.find(
-                ({ localeNorm }) => localeNorm.split("-")[0] === localeParts[0],
-              );
-              if (isTrans) return isTrans;
-            }
-            return transFB;
-          };
+        if (!src?.localeNorm) return;
 
-          const localeDir = (locale) =>
-            /^(?:ar|ckb|dv|fa|he|ku|ps|sd|ug|ur)(?:-|$)/i.test(locale)
-              ? "rtl"
-              : "ltr";
-
-          const applyTrans = (isForceReadme = false) => {
-            const translation = transFind();
-            if (!translation) return;
-
-            const locale = translation.locale;
-            const isLocaleToggled =
-              root.dataset.appliedLocale !== translation.localeNorm;
-            root.lang = locale;
-            root.dir = localeDir(locale);
-            root.dataset.locale = locale;
-            document.title = translation.title;
-
-            const ogTitle = document.querySelector('meta[property="og:title"]');
-            if (ogTitle) {
-              ogTitle.setAttribute("content", translation.title);
-            }
-
-            const tagline = document.querySelector("[data-i18n-tagline]");
-            if (tagline) {
-              const value = translation.tagline.trim();
-              tagline.textContent = value;
-              tagline.hidden = !value;
-            }
-
-            const readme = document.querySelector("[data-i18n-readme]");
-            if (readme && (isLocaleToggled || isForceReadme)) {
-              readme.innerHTML = translation.readmeHTML;
-            }
-
-            root.dataset.appliedLocale = translation.localeNorm;
-            if (isLocaleToggled || isForceReadme) {
-              window.dispatchEvent(
-                new CustomEvent("i18n-toggle-readme", {
-                  detail: { locale },
-                }),
-              );
-            }
-            window.clearTimeout(relTimer);
-            relPage();
-          };
-
-          const selected = transFind();
-          if (selected) {
-            root.lang = selected.locale;
-            root.dir = localeDir(selected.locale);
-            root.dataset.locale = selected.locale;
-          }
-
-          if (document.readyState === "loading") {
-            document.addEventListener(
-              "DOMContentLoaded",
-              () => applyTrans(true),
-              {
-                once: true,
-              },
-            );
-          } else {
-            applyTrans(true);
-          }
-
-          window.addEventListener("i18n-toggle", () => applyTrans(true));
-          window.addEventListener("pageshow", () => applyTrans());
-          document.addEventListener("visibilitychange", () => {
-            if (!document.hidden) applyTrans();
-          });
-        } catch (error) {
-          window.clearTimeout(relTimer);
-          relPage();
-          console.error("Failed to select browser language:", error);
+        const srcEntry = localeMap.get(src.localeNorm) ?? {
+          locale: src.locale,
+          localeNorm: src.localeNorm,
+        };
+        if (!localeMap.has(src.localeNorm)) {
+          locales.unshift(srcEntry);
+          localeMap.set(src.localeNorm, srcEntry);
         }
-      })();
-    </script>
 
-    <script is:inline>
-      (() => {
-        let savedTheme;
+        const transBase = String(payload.transBase ?? "");
+        const transCache = new Map([[src.localeNorm, Promise.resolve(src)]]);
+
+        const localeCache = new Map();
+        const localeInfo = (locale) => {
+          const key = localeNorm(locale);
+          if (localeCache.has(key)) return localeCache.get(key);
+
+          let info = {
+            language: "",
+            script: "",
+          };
+          try {
+            const parsed = new Intl.Locale(locale).maximize();
+            info = {
+              language: parsed.language.toLowerCase(),
+              script: parsed.script?.toLowerCase() ?? "",
+            };
+          } catch {
+            info = {
+              language: key.split("-")[0],
+              script: "",
+            };
+          }
+
+          localeCache.set(key, info);
+          return info;
+        };
+
+        const localeMatch = (locale) => {
+          const requested = localeNorm(locale);
+          if (!requested) return undefined;
+
+          const exact = localeMap.get(requested);
+          if (exact) return exact;
+
+          const requestedInfo = localeInfo(requested);
+          if (requestedInfo.script) {
+            const scriptMatch = locales.find((entry) => {
+              const info = localeInfo(entry.locale);
+              return (
+                info.language === requestedInfo.language &&
+                info.script === requestedInfo.script
+              );
+            });
+            if (scriptMatch) return scriptMatch;
+          }
+
+          const parts = requested.split("-");
+          for (let len = parts.length - 1; len >= 1; len -= 1) {
+            const lessSpecific = localeMap.get(parts.slice(0, len).join("-"));
+            if (lessSpecific) return lessSpecific;
+          }
+
+          return locales.find(
+            (entry) =>
+              localeInfo(entry.locale).language === requestedInfo.language,
+          );
+        };
+
+        const localeDir = (locale) => {
+          try {
+            const script = new Intl.Locale(locale).maximize().script;
+            if (
+              script &&
+              ["Adlm", "Arab", "Hebr", "Nkoo", "Rohg", "Syrc", "Thaa"].includes(
+                script,
+              )
+            ) {
+              return "rtl";
+            }
+          } catch {
+            // fall through to locale-prefix matching
+          }
+
+          return /^(?:ace-arab|acm|acq|aeb|ajp|apc|ar|ars|ary|arz|azb|ckb|fa|he|ks|ku-arab|ps|sd|ug|ur|yi)(?:-|$)/i.test(
+            locale,
+          )
+            ? "rtl"
+            : "ltr";
+        };
+
+        const loadTrans = (entry) => {
+          if (!entry) return Promise.resolve(undefined);
+
+          const cached = transCache.get(entry.localeNorm);
+          if (cached) return cached;
+
+          const request = fetch(
+            `${transBase}${encodeURIComponent(entry.locale)}.json`,
+            { cache: "force-cache" },
+          )
+            .then((res) => {
+              if (!res.ok) {
+                throw new Error(`HTTP ${res.status}`);
+              }
+              return res.json();
+            })
+            .then((translation) => {
+              if (
+                !translation ||
+                typeof translation !== "object" ||
+                localeNorm(translation.locale) !== entry.localeNorm ||
+                typeof translation.title !== "string" ||
+                typeof translation.tagline !== "string" ||
+                typeof translation.readmeHTML !== "string"
+              ) {
+                throw new Error("Invalid translation payload");
+              }
+              return {
+                ...translation,
+                localeNorm: entry.localeNorm,
+              };
+            })
+            .catch((error) => {
+              transCache.delete(entry.localeNorm);
+              console.warn(`[i18n] Could not load ${entry.locale}:`, error);
+              return undefined;
+            });
+
+          transCache.set(entry.localeNorm, request);
+          return request;
+        };
+
+        const applyTrans = (translation, isReplaceReadme = false) => {
+          if (!translation) return;
+
+          const locale = translation.locale;
+          root.lang = locale;
+          root.dir = localeDir(locale);
+          root.dataset.locale = locale;
+          root.dataset.appliedLocale = translation.localeNorm;
+          document.title = translation.title;
+
+          const ogTitle = document.querySelector('meta[property="og:title"]');
+          if (ogTitle) {
+            ogTitle.setAttribute("content", translation.title);
+          }
+
+          const tagline = document.querySelector("[data-i18n-tagline]");
+          if (tagline) {
+            const value = translation.tagline.trim();
+            tagline.textContent = value;
+            tagline.hidden = !value;
+          }
+
+          const readme = document.querySelector("[data-i18n-readme]");
+          if (readme && isReplaceReadme) {
+            window.dispatchEvent(new Event("i18n-before-readme"));
+            readme.innerHTML = translation.readmeHTML;
+            window.dispatchEvent(
+              new CustomEvent("i18n-toggle-readme", {
+                detail: { locale },
+              }),
+            );
+          }
+        };
+
+        let savedLocale = "";
         try {
-          savedTheme = localStorage.getItem("gh-profile-theme");
+          savedLocale = localeNorm(
+            localStorage.getItem("gh-profile-locale") ?? "",
+          );
         } catch {
           // pass
         }
 
-        const theme =
-          savedTheme === "light" || savedTheme === "dark"
-            ? savedTheme
-            : matchMedia("(prefers-color-scheme: dark)").matches
-              ? "dark"
-              : "light";
+        const findInitLocale = () => {
+          const saved = localeMatch(savedLocale);
+          if (saved) return saved;
 
-        const root = document.documentElement;
-        root.dataset.theme = theme;
-        root.classList.toggle("dark", theme === "dark");
-        root.style.colorScheme = theme;
-      })();
+          const browserLocales =
+            Array.isArray(navigator.languages) && navigator.languages.length
+              ? navigator.languages
+              : [navigator.language];
+
+          for (const browserLocale of browserLocales) {
+            const matched = localeMatch(browserLocale);
+            if (matched) return matched;
+          }
+
+          return localeMatch(payload.defLanguage) ?? srcEntry;
+        };
+
+        let selectedLocaleNorm = src.localeNorm;
+        let selectionRun = 0;
+
+        const selectLocale = async (
+          entry,
+          { persist = false, replaceReadme = true } = {},
+        ) => {
+          if (!entry) return;
+
+          const run = ++selectionRun;
+          selectedLocaleNorm = entry.localeNorm;
+
+          if (persist) {
+            savedLocale = entry.localeNorm;
+            try {
+              localStorage.setItem("gh-profile-locale", savedLocale);
+            } catch {
+              // pass
+            }
+          }
+
+          const translation = await loadTrans(entry);
+          if (run !== selectionRun || !translation) {
+            if (run === selectionRun && !translation) {
+              selectedLocaleNorm =
+                localeNorm(root.dataset.appliedLocale) || src.localeNorm;
+            }
+            return;
+          }
+
+          const apply = () => {
+            if (run !== selectionRun) return;
+            applyTrans(translation, replaceReadme);
+          };
+
+          if (document.readyState === "loading") {
+            document.addEventListener("DOMContentLoaded", apply, {
+              once: true,
+            });
+          } else {
+            apply();
+          }
+        };
+
+        const initialEntry = findInitLocale();
+        const isInitSrc = initialEntry.localeNorm === src.localeNorm;
+
+        void selectLocale(initialEntry, {
+          persist: false,
+          replaceReadme: !isInitSrc,
+        });
+
+        window.addEventListener("i18n-toggle", () => {
+          const curIdx = locales.findIndex(
+            ({ localeNorm: entryNorm }) => entryNorm === selectedLocaleNorm,
+          );
+          const next = locales[(curIdx + 1) % locales.length] ?? srcEntry;
+
+          void selectLocale(next, {
+            persist: true,
+            replaceReadme: true,
+          });
+        });
+        window.addEventListener("pageshow", () => {
+          const current = localeMap.get(selectedLocaleNorm) ?? srcEntry;
+          const applied = localeNorm(root.dataset.appliedLocale);
+          if (applied && applied !== current.localeNorm) {
+            void selectLocale(current, {
+              persist: false,
+              replaceReadme: true,
+            });
+          }
+        });
+      } catch (error) {
+        console.error("Failed to select browser language:", error);
+      }
+    })();
     </script>
 
     <script is:inline>
-      const copyIcon = `
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" fill="currentColor" aria-hidden="true">
-          <path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25Z"/>
-          <path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z"/>
-        </svg>
-      `;
-      const checkIcon = `
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" fill="currentColor" aria-hidden="true">
-          <path d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0Z"/>
-        </svg>
-      `;
+    (() => {
+      const root = document.documentElement;
+      const fixedTone = root.dataset.fixedThemeTone;
 
-      const copyButton = () => {
-        for (const pre of document.querySelectorAll(".gh-readme pre")) {
+      if (fixedTone === "light" || fixedTone === "dark") {
+        root.classList.remove("dark");
+        root.dataset.theme = "fixed";
+        root.style.colorScheme = fixedTone;
+        return;
+      }
+
+      let savedTheme = null;
+      try {
+        savedTheme = localStorage.getItem("gh-profile-theme");
+      } catch {
+        // pass
+      }
+
+      const theme =
+        savedTheme === "light" || savedTheme === "dark"
+          ? savedTheme
+          : matchMedia("(prefers-color-scheme: dark)").matches
+            ? "dark"
+            : "light";
+
+      root.dataset.theme = theme;
+      root.classList.toggle("dark", theme === "dark");
+      root.style.colorScheme = theme;
+
+      const themeMeta = document.querySelector('meta[name="theme-color"]');
+      if (themeMeta instanceof HTMLMetaElement) {
+        const color =
+          theme === "dark" ? themeMeta.dataset.dark : themeMeta.dataset.light;
+        if (color) themeMeta.content = color;
+      }
+    })();
+    </script>
+
+    <script is:inline>
+    (() => {
+      const root = document.documentElement;
+      const browserTheme = matchMedia("(prefers-color-scheme: dark)");
+      const isI18n = Boolean(document.getElementById("i18n-data"));
+
+      let readmeElement = null;
+      let localRun = 0;
+      let postprocessFrame = 0;
+      let isPendingSync = false;
+
+      const srcCache = new Map();
+      const localCache = new Map();
+      const activeObjectUrls = new Set();
+
+      const getReadme = () => {
+        if (readmeElement?.isConnected) return readmeElement;
+
+        const found = document.querySelector(".gh-readme");
+        readmeElement = found instanceof HTMLElement ? found : null;
+        return readmeElement;
+      };
+
+      const activeReadmeImageTheme = () => {
+        const fixedTone = root.dataset.fixedThemeTone;
+        if (fixedTone === "dark" || fixedTone === "light") {
+          return browserTheme.matches ? "dark" : "light";
+        }
+
+        return root.classList.contains("dark") ? "dark" : "light";
+      };
+
+      const syncReadmeThemeImages = () => {
+        const theme = activeReadmeImageTheme();
+        root.dataset.readmeImageTheme = theme;
+
+        const readme = getReadme();
+        if (!readme) return;
+
+        for (const image of readme.querySelectorAll(
+          'img[src*=".svg" i], img[data-i18n-svg-source]',
+        )) {
+          if (image instanceof HTMLImageElement) {
+            image.style.colorScheme = theme;
+          }
+        }
+
+        for (const source of readme.querySelectorAll(
+          'picture source[media*="prefers-color-scheme"], picture source[data-theme-media]',
+        )) {
+          if (!(source instanceof HTMLSourceElement)) continue;
+
+          const originalMedia =
+            source.dataset.themeMedia ?? source.getAttribute("media") ?? "";
+          source.dataset.themeMedia = originalMedia;
+
+          const wantsDark = /prefers-color-scheme\s*:\s*dark/i.test(
+            originalMedia,
+          );
+          const wantsLight = /prefers-color-scheme\s*:\s*light/i.test(
+            originalMedia,
+          );
+          if (!wantsDark && !wantsLight) continue;
+
+          const matches = wantsDark ? theme === "dark" : theme === "light";
+          source.media = matches ? "all" : "not all";
+        }
+      };
+
+      const localeNorm = (locale) =>
+        String(locale ?? "")
+          .trim()
+          .replaceAll("_", "-")
+          .toLowerCase();
+
+      const localeMatches = (systemLanguage, locale) => {
+        const requested = localeNorm(locale);
+        if (!requested) return false;
+
+        const requestedParts = requested.split("-");
+        const requestedTags = [];
+        for (let length = requestedParts.length; length >= 1; length -= 1) {
+          requestedTags.push(requestedParts.slice(0, length).join("-"));
+        }
+
+        return String(systemLanguage ?? "")
+          .split(",")
+          .map((tag) => localeNorm(tag))
+          .filter(Boolean)
+          .some((tag) =>
+            requestedTags.some(
+              (requestedTag) =>
+                tag === requestedTag ||
+                tag.startsWith(`${requestedTag}-`) ||
+                requestedTag.startsWith(`${tag}-`),
+            ),
+          );
+      };
+
+      const fetchSvg = (url) => {
+        if (!srcCache.has(url)) {
+          srcCache.set(
+            url,
+            fetch(url, { cache: "force-cache" })
+              .then((response) => {
+                if (!response.ok) {
+                  throw new Error(`HTTP ${response.status}`);
+                }
+                return response.text();
+              })
+              .catch((error) => {
+                console.warn(`[README SVG i18n] Could not load ${url}:`, error);
+                return null;
+              }),
+          );
+        }
+
+        return srcCache.get(url);
+      };
+
+      const applySvgLocale = (documentSvg, locale) => {
+        for (const switchElement of documentSvg.querySelectorAll("switch")) {
+          const children = Array.from(switchElement.children);
+          const selected = children.find((child) => {
+            const systemLanguage = child.getAttribute("systemLanguage");
+            return (
+              systemLanguage === null || localeMatches(systemLanguage, locale)
+            );
+          });
+
+          for (const child of children) {
+            if (child !== selected) child.remove();
+          }
+          selected?.removeAttribute("systemLanguage");
+        }
+
+        for (const element of documentSvg.querySelectorAll(
+          "[systemLanguage]",
+        )) {
+          const systemLanguage = element.getAttribute("systemLanguage");
+          if (systemLanguage && localeMatches(systemLanguage, locale)) {
+            element.removeAttribute("systemLanguage");
+          } else {
+            element.remove();
+          }
+        }
+
+        const svg = documentSvg.documentElement;
+        svg.setAttribute("lang", locale);
+        svg.setAttribute("data-locale", locale);
+        svg.setAttributeNS(
+          "http://www.w3.org/XML/1998/namespace",
+          "xml:lang",
+          locale,
+        );
+
+        return documentSvg;
+      };
+
+      const localizeSvg = (source, locale) => {
+        if (
+          !/\bsystemLanguage\s*=/i.test(source) &&
+          !/:lang\s*\(/i.test(source)
+        ) {
+          return null;
+        }
+
+        const documentSvg = new DOMParser().parseFromString(
+          source,
+          "image/svg+xml",
+        );
+        if (documentSvg.querySelector("parsererror")) return null;
+
+        return new XMLSerializer().serializeToString(
+          applySvgLocale(documentSvg, locale),
+        );
+      };
+
+      const syncInlineSvgLanguage = (readme, locale) => {
+        const localeKey = localeNorm(locale);
+
+        for (const svg of readme.querySelectorAll("svg")) {
+          if (svg.dataset.i18nSvgLocale === localeKey) continue;
+
+          const localized = localizeSvg(svg.outerHTML, locale);
+          if (!localized) continue;
+
+          const localizedDocument = new DOMParser().parseFromString(
+            localized,
+            "image/svg+xml",
+          );
+          if (localizedDocument.querySelector("parsererror")) continue;
+
+          const replacement = document.importNode(
+            localizedDocument.documentElement,
+            true,
+          );
+          replacement.dataset.i18nSvgLocale = localeKey;
+          svg.replaceWith(replacement);
+        }
+      };
+
+      const firstSrcCandidate = (srcset) =>
+        String(srcset ?? "")
+          .split(",")[0]
+          ?.trim()
+          .split(/\s+/)[0] ?? "";
+
+      const svgCarriersForImage = (image) => {
+        const carriers = [];
+        const picture = image.closest("picture");
+
+        if (picture) {
+          for (const source of picture.querySelectorAll("source")) {
+            if (!(source instanceof HTMLSourceElement)) continue;
+
+            const original =
+              source.dataset.i18nSvgSource ||
+              source.getAttribute("srcset") ||
+              "";
+            const candidate = firstSrcCandidate(original);
+            if (!candidate?.toLowerCase().includes(".svg")) {
+              continue;
+            }
+
+            source.dataset.i18nSvgSource = original;
+            carriers.push({
+              url: new URL(candidate, document.baseURI).href,
+              carrier: source,
+              apply: (localizedUrl) => {
+                source.srcset = localizedUrl;
+              },
+            });
+          }
+        }
+
+        const original =
+          image.dataset.i18nSvgSource || image.getAttribute("src") || "";
+        if (original.toLowerCase().includes(".svg")) {
+          image.dataset.i18nSvgSource = original;
+
+          if (/#gh-dark-mode-only(?:$|[?&])/i.test(original)) {
+            image.dataset.ghThemeOnly = "dark";
+          } else if (/#gh-light-mode-only(?:$|[?&])/i.test(original)) {
+            image.dataset.ghThemeOnly = "light";
+          }
+
+          carriers.push({
+            url: new URL(original, document.baseURI).href,
+            carrier: image,
+            apply: (localizedUrl) => {
+              image.src = localizedUrl;
+            },
+          });
+        }
+
+        return carriers;
+      };
+
+      const localUrl = async (url, locale) => {
+        const variantKey = `${url}|${localeNorm(locale)}`;
+        if (localCache.has(variantKey)) {
+          return localCache.get(variantKey);
+        }
+
+        const svgText = await fetchSvg(url);
+        if (!svgText) {
+          localCache.set(variantKey, null);
+          return null;
+        }
+
+        const localized = localizeSvg(svgText, locale);
+        if (!localized) {
+          localCache.set(variantKey, null);
+          return null;
+        }
+
+        const blobUrl = URL.createObjectURL(
+          new Blob([localized], { type: "image/svg+xml" }),
+        );
+        localCache.set(variantKey, blobUrl);
+        activeObjectUrls.add(blobUrl);
+        return blobUrl;
+      };
+
+      const syncReadmeSvgLanguage = async () => {
+        if (!isI18n) return;
+
+        const readme = getReadme();
+        if (!readme) return;
+
+        const run = ++localRun;
+        const locale = root.dataset.locale || root.lang || "en";
+        syncInlineSvgLanguage(readme, locale);
+
+        const images = Array.from(readme.querySelectorAll("img")).filter(
+          (image) => image instanceof HTMLImageElement,
+        );
+
+        await Promise.all(
+          images.map(async (image) => {
+            const carriers = svgCarriersForImage(image);
+            if (!carriers.length) return;
+
+            await Promise.all(
+              carriers.map(async ({ url, carrier, apply }) => {
+                const localizedUrl = await localUrl(url, locale);
+                if (
+                  !localizedUrl ||
+                  run !== localRun ||
+                  !image.isConnected ||
+                  !carrier.isConnected
+                ) {
+                  return;
+                }
+
+                apply(localizedUrl);
+              }),
+            );
+
+            const theme = root.dataset.readmeImageTheme;
+            if (theme === "light" || theme === "dark") {
+              image.style.colorScheme = theme;
+            }
+          }),
+        );
+      };
+
+      const copyIcon = `
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" fill="currentColor" aria-hidden="true">
+            <path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25Z"/>
+            <path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z"/>
+          </svg>
+        `;
+
+      const checkIcon = `
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" fill="currentColor" aria-hidden="true">
+            <path d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0Z"/>
+          </svg>
+        `;
+
+      const addCopyButtons = () => {
+        const readme = getReadme();
+        if (!readme) return;
+
+        for (const pre of readme.querySelectorAll("pre")) {
           if (pre.querySelector(".copy-code-button")) continue;
+
           const button = document.createElement("button");
           button.type = "button";
           button.className = "copy-code-button";
@@ -271,14 +848,68 @@ const i18n: string | undefined =
           pre.append(button);
         }
       };
+
+      const scheduleReadmePostprocess = (withSvg = false) => {
+        isPendingSync ||= withSvg;
+        if (postprocessFrame) return;
+
+        postprocessFrame = requestAnimationFrame(() => {
+          postprocessFrame = 0;
+          const shouldSyncSvg = isPendingSync;
+          isPendingSync = false;
+
+          syncReadmeThemeImages();
+          addCopyButtons();
+
+          if (shouldSyncSvg) {
+            void syncReadmeSvgLanguage();
+          }
+        });
+      };
+
+      const runWhenIdle = (callback) => {
+        if ("requestIdleCallback" in window) {
+          window.requestIdleCallback(callback, { timeout: 1000 });
+        } else {
+          setTimeout(callback, 0);
+        }
+      };
+
+      const initialReadmeSetup = () => {
+        scheduleReadmePostprocess(false);
+
+        if (isI18n) {
+          runWhenIdle(() => {
+            scheduleReadmePostprocess(true);
+          });
+        }
+      };
+
       if (document.readyState === "loading") {
-        document.addEventListener("DOMContentLoaded", copyButton, {
+        document.addEventListener("DOMContentLoaded", initialReadmeSetup, {
           once: true,
         });
       } else {
-        copyButton();
+        initialReadmeSetup();
       }
-      window.addEventListener("i18n-toggle-readme", copyButton);
+
+      window.addEventListener("i18n-before-readme", () => {
+        localRun += 1;
+      });
+
+      window.addEventListener("i18n-toggle-readme", () => {
+        scheduleReadmePostprocess(true);
+      });
+
+      window.addEventListener("readme-theme-change", () => {
+        scheduleReadmePostprocess(false);
+      });
+
+      browserTheme.addEventListener("change", () => {
+        if (root.dataset.fixedThemeTone) {
+          scheduleReadmePostprocess(false);
+        }
+      });
 
       document.addEventListener("click", async (event) => {
         const button =
@@ -297,7 +928,9 @@ const i18n: string | undefined =
           button.innerHTML = checkIcon;
           button.ariaLabel = "Code copied";
           button.classList.add("copied");
+
           setTimeout(() => {
+            if (!button.isConnected) return;
             button.innerHTML = copyIcon;
             button.ariaLabel = "Copy code to clipboard";
             button.classList.remove("copied");
@@ -306,55 +939,67 @@ const i18n: string | undefined =
           console.error("Failed to copy code:", error);
         }
       });
+
+      window.addEventListener(
+        "pagehide",
+        () => {
+          localRun += 1;
+
+          if (postprocessFrame) {
+            cancelAnimationFrame(postprocessFrame);
+            postprocessFrame = 0;
+          }
+
+          for (const url of activeObjectUrls) {
+            URL.revokeObjectURL(url);
+          }
+          activeObjectUrls.clear();
+          localCache.clear();
+        },
+        { once: true },
+      );
+    })();
     </script>
 
     <title>{title}</title>
     <meta
       name="robots"
       content={noindex ? "noindex, nofollow" : "max-image-preview:large"}
-    />
+    >
 
     <link
       rel="icon"
       href={favUrl ??
-        `${import.meta.env.BASE_URL.replace(/\/?$/, "/")}favicon.svg`}
-    />
+          `${import.meta.env.BASE_URL.replace(/\/?$/, "/")}favicon.svg`}
+    >
 
-    {
-      description && (
-        <>
-          <meta name="description" content={description} />
-          <meta property="og:description" content={description} />
-        </>
-      )
-    }
+    {description && (
+      <>
+        <meta name="description" content={description} />
+        <meta property="og:description" content={description} />
+      </>
+  )}
 
-    {
-      baseUrl && (
-        <>
-          <link rel="canonical" href={baseUrl} />
-          <meta property="og:url" content={baseUrl} />
-        </>
-      )
-    }
+    {baseUrl && (
+      <>
+        <link rel="canonical" href={baseUrl} />
+        <meta property="og:url" content={baseUrl} />
+      </>
+  )}
 
-    <meta property="og:type" content="profile" />
-    <meta property="og:title" content={title} />
+    <meta property="og:type" content="profile">
+    <meta property="og:title" content={title}>
 
-    {
-      imageUrl && (
-        <>
-          <meta property="og:image" content={imageUrl} />
-          {imageAlt && <meta property="og:image:alt" content={imageAlt} />}
-        </>
-      )
-    }
+    {imageUrl && (
+      <>
+        <meta property="og:image" content={imageUrl} />
+        {imageAlt && <meta property="og:image:alt" content={imageAlt} />}
+      </>
+  )}
 
-    {
-      jsonLd && (
-        <script is:inline type="application/ld+json" set:html={jsonLd} />
-      )
-    }
+    {jsonLd && (
+      <script is:inline type="application/ld+json" set:html={jsonLd} />
+  )}
   </head>
 
   <body>

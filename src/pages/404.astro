@@ -1,8 +1,8 @@
 ---
-import BaseLayout from "../layouts/BaseLayout.astro";
 import { githubAvatarUrl, siteConfig } from "../config";
+import BaseLayout from "../layouts/BaseLayout.astro";
 
-const { tabName, language, themeCol } = siteConfig;
+const { tabName, language, theme, style } = siteConfig;
 const title: string = `Page not found — ${tabName}`;
 ---
 
@@ -12,7 +12,8 @@ const title: string = `Page not found — ${tabName}`;
   imageUrl={githubAvatarUrl}
   imageAlt={`${tabName}'s GitHub profile photo`}
   language={language}
-  themeCol={themeCol}
+  theme={theme}
+  style={style}
   noindex
 >
   <main class="grid min-h-screen place-items-center px-6 py-16 text-center">

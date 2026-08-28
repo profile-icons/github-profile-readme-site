@@ -3,6 +3,10 @@ dist/
 
 # generated types
 .astro/
+.models/
+.cache/
+public/
+src/gen/
 
 # dependencies
 node_modules/
@@ -22,5 +26,3 @@ pnpm-debug.log*
 
 # jetbrains setting folder
 .idea/
-
-.cache/

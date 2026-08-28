@@ -1,0 +1,34 @@
+---
+import type { GitHubOrg } from "../lib/gh";
+
+interface Props {
+  orgBadges: GitHubOrg[];
+}
+
+const { orgBadges }: Props = Astro.props;
+---
+
+{orgBadges.length > 0 && (
+    <nav class="profile-orgs" aria-label="GitHub organizations">
+      {orgBadges.map((orgBadge: GitHubOrg) => (
+        <a
+          class="profile-org"
+          href={orgBadge.profileUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label={`@${orgBadge.login} on GitHub`}
+          title={`@${orgBadge.login}`}
+        >
+          <img
+            class="profile-org-avatar"
+            src={orgBadge.avatarUrl}
+            alt=""
+            width="28"
+            height="28"
+            loading="lazy"
+          />
+          <span>@{orgBadge.login}</span>
+        </a>
+      ))}
+    </nav>
+  )}

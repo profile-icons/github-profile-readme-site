@@ -1,0 +1,72 @@
+<button
+  id="theme-toggle"
+  type="button"
+  class="theme-toggle"
+  aria-label="Toggle dark mode"
+  aria-pressed="false"
+>
+  <svg
+    class="theme-toggle-icon theme-toggle-sun"
+    viewBox="0 0 24 24"
+    width="20"
+    height="20"
+    aria-hidden="true"
+  >
+    <circle cx="12" cy="12" r="4"></circle>
+    <path
+      d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.42-1.42M17.66 6.34l1.41-1.41"
+    ></path>
+  </svg>
+
+  <svg
+    class="theme-toggle-icon theme-toggle-moon"
+    viewBox="0 0 24 24"
+    width="20"
+    height="20"
+    aria-hidden="true"
+  >
+    <path
+      d="M20.25 15.32A8.5 8.5 0 0 1 8.68 3.75 8.5 8.5 0 1 0 20.25 15.32Z"
+    ></path>
+  </svg>
+</button>
+
+<script>
+const button: HTMLElement | null = document.getElementById("theme-toggle");
+const root: HTMLElement = document.documentElement;
+
+if (button instanceof HTMLButtonElement) {
+  const themeMeta: HTMLMetaElement | null =
+    document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
+
+  const setTheme = (dark: boolean): void => {
+    const theme: "dark" | "light" = dark ? "dark" : "light";
+
+    root.classList.toggle("dark", dark);
+    root.dataset.theme = theme;
+    root.style.colorScheme = theme;
+
+    button.setAttribute("aria-pressed", String(dark));
+
+    const themeCol: string | undefined = dark
+      ? themeMeta?.dataset.dark
+      : themeMeta?.dataset.light;
+    if (themeCol) themeMeta?.setAttribute("content", themeCol);
+
+    try {
+      localStorage.setItem("gh-profile-theme", theme);
+    } catch {
+      // pass
+    }
+
+    window.dispatchEvent(
+      new CustomEvent("readme-theme-change", { detail: { theme } }),
+    );
+  };
+
+  button.setAttribute("aria-pressed", String(root.classList.contains("dark")));
+  button.addEventListener("click", (): void => {
+    setTheme(!root.classList.contains("dark"));
+  });
+}
+</script>

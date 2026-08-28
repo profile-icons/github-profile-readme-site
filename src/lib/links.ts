@@ -1,5 +1,5 @@
-import * as simpleIcons from "simple-icons";
 import type { SimpleIcon } from "simple-icons";
+import * as simpleIcons from "simple-icons";
 
 export type IconFB = "email" | "link" | "website";
 

@@ -13,6 +13,12 @@ export interface ReadmeRes extends ReadmeSrc {
   isSuccess: boolean;
 }
 
+export interface GitHubOrg {
+  login: string;
+  avatarUrl: string;
+  profileUrl: string;
+}
+
 function stripPerms(header: string): string {
   return header.replace(
     /<a\b[^>]*\bclass\s*=\s*(["'])[^"']*\banchor\b[^"']*\1[^>]*>[\s\S]*?<\/a>/gi,
@@ -34,7 +40,7 @@ function normHeadMD(html: string): string {
     .replace(
       /<h1\b([^>]*)>([\s\S]*?)<\/h1>/i,
       (_match: string, attrs: string, contents: string): string =>
-        `<h1${attrs}>` + `${stripPerms(contents)}` + `</h1>`,
+        `<h1${attrs}>${stripPerms(contents)}</h1>`,
     )
     .replace(
       /(<h1\b[^>]*>[\s\S]*?<\/h1>)\s*<a\b[^>]*\bclass\s*=\s*(["'])[^"']*\banchor\b[^"']*\2[^>]*>[\s\S]*?<\/a>/i,
@@ -185,6 +191,10 @@ function urlUserAPI(username: string): string {
   return `https://api.github.com/users/${encodeURIComponent(username)}`;
 }
 
+function urlOrgAPI(org: string): string {
+  return `https://api.github.com/orgs/${encodeURIComponent(org)}`;
+}
+
 function urlRepoAPI(src: ReadmeSrc, path = ""): string {
   return (
     "https://api.github.com/repos/" +
@@ -211,12 +221,112 @@ async function isOrg(
   }
 }
 
+export async function fetchOrgs(orgNames: string[]): Promise<GitHubOrg[]> {
+  const orgs: string[] = [
+    ...new Set(
+      orgNames
+        .map((org: string): string => org.trim().replace(/^@+/, ""))
+        .filter(Boolean),
+    ),
+  ];
+  if (orgs.length === 0) return [];
+
+  const headers: Record<string, string> = getHeaders(
+    "application/vnd.github+json",
+  );
+
+  const results: Array<GitHubOrg | undefined> = await Promise.all(
+    orgs.map(async (org: string): Promise<GitHubOrg | undefined> => {
+      try {
+        const res: Response = await fetch(urlOrgAPI(org), {
+          headers,
+        });
+        if (res.status === 404) {
+          console.warn(
+            `[GitHub organization] @${org} was not found or is not public.`,
+          );
+          return undefined;
+        }
+        if (!res.ok) {
+          console.warn(
+            `[GitHub organization] @${org}: GitHub API returned ${res.status} ${res.statusText}.`,
+          );
+          return undefined;
+        }
+
+        const orgObj = (await res.json()) as {
+          login?: unknown;
+          avatar_url?: unknown;
+          html_url?: unknown;
+        };
+        if (
+          typeof orgObj.login !== "string" ||
+          !orgObj.login.trim() ||
+          typeof orgObj.avatar_url !== "string" ||
+          !orgObj.avatar_url.trim()
+        ) {
+          console.warn(
+            `[GitHub organization] @${org} returned incomplete profile data.`,
+          );
+          return undefined;
+        }
+
+        const login: string = orgObj.login.trim();
+        const profileUrl: string =
+          typeof orgObj.html_url === "string" && orgObj.html_url.trim()
+            ? orgObj.html_url.trim()
+            : `https://github.com/${encodeURIComponent(login)}`;
+
+        return {
+          login,
+          avatarUrl: orgObj.avatar_url.trim(),
+          profileUrl,
+        };
+      } catch (error) {
+        const msg: string =
+          error instanceof Error ? error.message : "Unknown network error.";
+        console.warn(`[GitHub organization] @${org}: ${msg}`);
+        return undefined;
+      }
+    }),
+  );
+
+  return results.filter(
+    (org: GitHubOrg | undefined): org is GitHubOrg => org !== undefined,
+  );
+}
+
 function encPath(path: string): string {
   return path
     .split("/")
     .filter(Boolean)
     .map((part: string): string => encodeURIComponent(part))
     .join("/");
+}
+
+function optImg(html: string): string {
+  let imgIdx = 0;
+
+  return html.replace(/<img\b([^>]*)>/gi, (_tag: string, attrs: string) => {
+    const isFirst = imgIdx++ === 0;
+
+    let output = `<img${attrs}>`;
+    if (!/\bdecoding\s*=/i.test(output)) {
+      output = output.replace(/>$/, ' decoding="async">');
+    }
+
+    if (!/\bloading\s*=/i.test(output)) {
+      output = output.replace(
+        />$/,
+        isFirst ? ' loading="eager">' : ' loading="lazy">',
+      );
+    }
+
+    if (isFirst && !/\bfetchpriority\s*=/i.test(output)) {
+      output = output.replace(/>$/, ' fetchpriority="high">');
+    }
+    return output;
+  });
 }
 
 function fmtUrls(html: string, src: ReadmeSrc, defBranch: string): string {
@@ -302,14 +412,16 @@ export async function fetchReadMe(
       breaks: false,
     });
 
-    const html: string = fmtUrls(
-      formatTag(
-        formatTag(normHeadMD(renderedMD), "h1", "readme-title"),
-        "p",
-        "readme-intro",
+    const html: string = optImg(
+      fmtUrls(
+        formatTag(
+          formatTag(normHeadMD(renderedMD), "h1", "readme-title"),
+          "p",
+          "readme-intro",
+        ),
+        src,
+        defBranch,
       ),
-      src,
-      defBranch,
     );
     return {
       ...src,

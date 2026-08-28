@@ -1,52 +1,52 @@
 ---
+import OrgBadges from "../components/LinkOrgBadges.astro";
+import IconLinks from "../components/LinkSiteIcons.astro";
 import ProfileAvatar from "../components/ProfileAvatar.astro";
-import IconLinks from "../components/IconLinks.astro";
-import ThemeToggle from "../components/ThemeToggle.astro";
-import BaseLayout from "../layouts/BaseLayout.astro";
-
+import ToggleLocale from "../components/ToggleLocale.astro";
+import ToggleTheme from "../components/ToggleTheme.astro";
 import {
   githubAvatarUrl,
   githubProfileUrl,
-  locales,
   localeSrc,
+  locales,
   siteConfig,
 } from "../config";
-import { getIconLinks, idUrls } from "../lib/links";
+import BaseLayout from "../layouts/BaseLayout.astro";
 import { fetchAvatar } from "../lib/fav";
-import { getTranslations, type ProfileTrans } from "../lib/profile";
+import { fetchOrgs } from "../lib/gh";
+import { getIconLinks, idUrls } from "../lib/links";
+import { getTranslations } from "../lib/profile";
+import { resolveTheme, resolveThemeColor, type ThemeType } from "../lib/theme";
 
-const { description, githubName, links, tabName, themeCol } = siteConfig;
-const [translations, favUrl, iconLinks] = await Promise.all([
-  Promise.all(
-    locales.map(async (locale: string) => {
-      const translation: ProfileTrans = await getTranslations(locale);
-      return [locale, translation] as const;
-    }),
-  ),
+const {
+  description,
+  githubName,
+  links,
+  organizations: orgNames,
+  tabName,
+  theme,
+  themeColor,
+  style,
+} = siteConfig;
+const themeType: ThemeType = resolveTheme(theme);
+const resolvedThemeColor: string | undefined = resolveThemeColor(themeColor);
+const isToggleTheme: boolean = !(
+  themeType.type === "default" && resolvedThemeColor
+);
+const isToggleLocale: boolean = locales.length > 1;
+const [profileSrc, favUrl, iconLinks, orgBadges] = await Promise.all([
+  getTranslations(localeSrc),
   fetchAvatar(githubAvatarUrl),
   getIconLinks(links),
+  fetchOrgs(orgNames ?? []),
 ]);
 
-const transMap: Map<string, ProfileTrans> = new Map<string, ProfileTrans>(
-  translations,
-);
-const srcProfile: ProfileTrans | undefined = transMap.get(localeSrc);
-if (!srcProfile) {
-  throw new Error(`Source profile for ${localeSrc} is not found.`);
-}
-
-const getTrans = locales.map((locale: string) => {
-  const trans: ProfileTrans | undefined = transMap.get(locale);
-  if (!trans) {
-    throw new Error(`README translation for ${locale} is not found.`);
-  }
-  return {
-    locale,
-    title: trans.title,
-    tagline: trans.tagline,
-    readmeHTML: trans.readme.html,
-  };
-});
+const srcTrans = {
+  locale: localeSrc,
+  title: profileSrc.title,
+  tagline: profileSrc.tagline,
+  readmeHTML: profileSrc.readme.html,
+};
 
 const url: URL = new URL(Astro.url.pathname, Astro.site);
 const sameAs: string[] = [...new Set([githubProfileUrl, ...idUrls(iconLinks)])];
@@ -55,7 +55,7 @@ const structData = {
   "@context": "https://schema.org",
   "@type": "ProfilePage",
   url: url.href,
-  name: srcProfile.title,
+  name: profileSrc.title,
   ...(description && { description }),
 
   mainEntity: {
@@ -71,36 +71,46 @@ const structData = {
 ---
 
 <BaseLayout
-  title={srcProfile.title}
+  title={profileSrc.title}
   description={description}
   url={url}
   imageUrl={githubAvatarUrl}
   imageAlt={`${tabName}'s GitHub profile photo`}
   language={localeSrc}
-  themeCol={themeCol}
+  theme={theme}
+  themeColor={themeColor}
+  style={style}
   data={structData}
   favUrl={favUrl}
-  translations={getTrans}
+  locales={locales}
+  srcTrans={srcTrans}
   defLanguage={localeSrc}
 >
   <main
     class="content-shell relative mx-auto min-h-screen max-w-4xl px-5 py-10 sm:px-8 sm:py-16"
   >
-    <ThemeToggle />
+    {(isToggleTheme || isToggleLocale) && (
+        <div class="profile-controls">
+          {isToggleTheme && <ToggleTheme />}
+          {isToggleLocale && <ToggleLocale />}
+        </div>
+    )}
 
     <ProfileAvatar
       imageUrl={githubAvatarUrl}
       profileUrl={githubProfileUrl}
       tabName={tabName}
-      tagline={srcProfile.tagline}
+      tagline={profileSrc.tagline}
     />
 
     <IconLinks links={iconLinks} />
 
+    <OrgBadges orgBadges={orgBadges} />
+
     <article
-      class="gh-readme prose max-w-none prose-slate dark:prose-invert"
+      class="gh-readme prose max-w-none"
       data-i18n-readme
-      set:html={srcProfile.readme.html}
+      set:html={profileSrc.readme.html}
     />
   </main>
 </BaseLayout>
