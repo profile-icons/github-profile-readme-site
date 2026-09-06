@@ -1,0 +1,61 @@
+<button
+  id="site-theme-toggle"
+  type="button"
+  class="site-theme-toggle"
+  aria-label="Switch theme"
+>
+  <span class="site-theme-toggle-symbol" aria-hidden="true">∀</span>
+  <span class="site-theme-toggle-tooltip" aria-hidden="true">
+    <span data-site-theme-tooltip></span>
+  </span>
+</button>
+
+<script>
+const button: HTMLElement | null = document.getElementById("site-theme-toggle");
+const root: HTMLElement = document.documentElement;
+const dataElement: HTMLElement | null =
+  document.getElementById("all-theme-data");
+
+if (button instanceof HTMLButtonElement && dataElement) {
+  try {
+    const payload: { names?: unknown } = JSON.parse(
+      dataElement.textContent ?? "{}",
+    );
+    const names: string[] = Array.isArray(payload.names)
+      ? payload.names.filter(
+          (name: unknown): name is string =>
+            typeof name === "string" && Boolean(name.trim()),
+        )
+      : [];
+    const tooltip: HTMLElement | null = button.querySelector(
+      "[data-site-theme-tooltip]",
+    );
+
+    const syncLabel = (): void => {
+      const current: string = root.dataset.siteTheme ?? names[0] ?? "";
+      const label: string = current.toLowerCase();
+      button.setAttribute(
+        "aria-label",
+        label ? `Switch theme. Current theme: ${label}.` : "Switch theme",
+      );
+      if (tooltip) tooltip.textContent = label;
+    };
+
+    syncLabel();
+    button.addEventListener("click", (): void => {
+      const first: string | undefined = names[0];
+      if (!first) return;
+      const current: string = root.dataset.siteTheme ?? first;
+      const currentIndex: number = names.indexOf(current);
+      const next: string = names[(currentIndex + 1) % names.length] ?? first;
+      window.dispatchEvent(
+        new CustomEvent("site-theme-select", { detail: { theme: next } }),
+      );
+    });
+    window.addEventListener("site-theme-change", syncLabel);
+    window.addEventListener("pageshow", syncLabel);
+  } catch (error) {
+    console.error("Failed to initialize theme switcher:", error);
+  }
+}
+</script>

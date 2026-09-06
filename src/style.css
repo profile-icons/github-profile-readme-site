@@ -220,6 +220,10 @@ body {
   margin-block: 1.25rem;
 }
 
+html[dir="rtl"] .gh-readme a {
+  unicode-bidi: isolate;
+}
+
 .gh-readme p:has(> a > img[alt*="pin img"]) > a {
   display: block;
   min-width: 0;
@@ -278,6 +282,8 @@ body {
   text-wrap: balance;
 }
 
+.site-theme-toggle,
+.site-style-toggle,
 .theme-toggle,
 .i18n-toggle,
 .profile-link {
@@ -289,6 +295,8 @@ body {
 }
 
 :is(
+  .site-theme-toggle,
+  .site-style-toggle,
   .theme-toggle,
   .i18n-toggle,
   .profile-link,
@@ -308,6 +316,8 @@ body {
   gap: 0.5rem;
 }
 
+.site-theme-toggle,
+.site-style-toggle,
 .theme-toggle,
 .i18n-toggle {
   width: 2.75rem;
@@ -324,20 +334,24 @@ body {
     color 160ms ease;
 }
 
-:is(.theme-toggle, .i18n-toggle):hover {
+:is(.site-theme-toggle, .site-style-toggle, .theme-toggle, .i18n-toggle):hover {
   transform: translateY(-1px) scale(1.03);
 }
 
+.site-theme-toggle,
+.site-style-toggle,
 .i18n-toggle {
   position: relative;
 }
 
-:is(.theme-toggle, .i18n-toggle):hover {
+:is(.site-theme-toggle, .site-style-toggle, .theme-toggle, .i18n-toggle):hover {
   border-color: var(--link-hover-border);
   background: var(--link-hover-background);
   color: var(--link-hover-text);
 }
 
+.site-theme-toggle-tooltip,
+.site-style-toggle-tooltip,
 .i18n-toggle-tooltip {
   position: absolute;
   top: calc(100% + 0.5rem);
@@ -366,11 +380,22 @@ body {
   white-space: nowrap;
 }
 
+.site-theme-toggle:hover .site-theme-toggle-tooltip,
+.site-theme-toggle:focus-visible .site-theme-toggle-tooltip,
+.site-style-toggle:hover .site-style-toggle-tooltip,
+.site-style-toggle:focus-visible .site-style-toggle-tooltip,
 .i18n-toggle:hover .i18n-toggle-tooltip,
 .i18n-toggle:focus-visible .i18n-toggle-tooltip {
   opacity: 1;
   transform: translateY(0);
   visibility: visible;
+}
+
+.site-theme-toggle-symbol,
+.site-style-toggle-symbol {
+  font-size: 1.2rem;
+  font-weight: 700;
+  line-height: 1;
 }
 
 .i18n-toggle-tooltip-icon {
@@ -610,7 +635,7 @@ html[data-readme-image-theme="dark"]
   flex-wrap: wrap;
   align-items: center;
   gap: 0.5rem;
-  margin-block: 1.5rem 1rem;
+  margin-block: 1.5rem 1.5rem;
 }
 
 .profile-org {
@@ -667,10 +692,6 @@ html[dir="rtl"] .gh-readme :where(pre, code, kbd, samp) {
   direction: ltr;
   unicode-bidi: isolate;
   text-align: left;
-}
-
-html[dir="rtl"] .gh-readme a {
-  unicode-bidi: isolate;
 }
 
 html[dir="rtl"] .gh-readme a[href^="http"],

@@ -4,7 +4,14 @@ export type ThemeVar = Record<string, string>;
 
 export type ThemeType =
   | { type: "default" }
-  | { type: "name"; name: string; light: ThemeVar; dark: ThemeVar };
+  | { type: "name"; name: string; light: ThemeVar; dark: ThemeVar }
+  | {
+      type: "all";
+      name: string;
+      light: ThemeVar;
+      dark: ThemeVar;
+      names: string[];
+    };
 
 interface Theme {
   light: ThemeVar;
@@ -95,6 +102,12 @@ for (const [themeName, theme] of Object.entries(themes)) {
     );
   }
 }
+
+const sortedThemeNames: string[] = Object.keys(themes).sort(
+  (a: string, b: string): number => a.localeCompare(b),
+);
+
+export const themeNames: () => string[] = (): string[] => [...sortedThemeNames];
 
 const parseHex: (val: string) => [number, number, number] | undefined = (
   val: string,
@@ -238,6 +251,22 @@ export const resolveTheme: (val?: string | undefined) => ThemeType = (
     );
   }
 
+  if (themeVal === "all") {
+    const names: string[] = themeNames();
+    const name: string | undefined = names[0];
+    const theme: Theme | undefined = name ? themes[name] : undefined;
+    if (!name || !theme) {
+      throw new Error("Theme collection is empty.");
+    }
+    return {
+      type: "all",
+      name,
+      light: theme.light,
+      dark: theme.dark,
+      names,
+    };
+  }
+
   const theme: Theme | undefined = themes[themeVal];
   if (!theme) {
     const availableThemes: string = Object.keys(themes).sort().join(", ");
@@ -267,6 +296,32 @@ export const themeCSS: (
   const nameStr: string = JSON.stringify(name);
   return `html[data-site-theme=${nameStr}]{${variantCSS(light)}}html[data-site-theme=${nameStr}].dark{${variantCSS(dark)}}`;
 };
+
+export const allThemesCSS: (names?: string[]) => string = (
+  names: string[] = sortedThemeNames,
+): string =>
+  names
+    .map((name: string): string => {
+      const theme: Theme | undefined = themes[name];
+      return theme ? themeCSS(name, theme.light, theme.dark) : "";
+    })
+    .join("");
+
+export const themeBackgrounds: (
+  names?: string[],
+) => Record<string, { light: string; dark: string }> = (
+  names: string[] = sortedThemeNames,
+): Record<string, { light: string; dark: string }> =>
+  Object.fromEntries(
+    names.flatMap((name: string) => {
+      const theme: Theme | undefined = themes[name];
+      if (!theme) return [];
+      const light: string | undefined = theme.light["--page-background"];
+      const dark: string | undefined = theme.dark["--page-background"];
+      if (!light || !dark) return [];
+      return [[name, { light, dark }]];
+    }),
+  );
 
 export const themeColorCSS: (
   col: string,

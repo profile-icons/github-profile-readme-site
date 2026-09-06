@@ -1,10 +1,12 @@
 ---
 import "../style.css";
-import { resolveStyle, styleCSS } from "../lib/style";
+import { allStylesCSS, resolveStyle, styleCSS } from "../lib/style";
 import {
+  allThemesCSS,
   resolveTheme,
   resolveThemeColor,
   themeAccentCSS,
+  themeBackgrounds,
   themeBG,
   themeColorCSS,
   themeColorTone,
@@ -61,18 +63,20 @@ const styleSelection = resolveStyle(style);
 const fixedThemeColor: string | undefined =
   themeSelection.type === "default" ? resolvedThemeColor : undefined;
 const accentThemeColor: string | undefined =
-  themeSelection.type === "name" ? resolvedThemeColor : undefined;
+  themeSelection.type !== "default" ? resolvedThemeColor : undefined;
 const fixedThemeTone: "light" | "dark" | undefined = fixedThemeColor
   ? themeColorTone(fixedThemeColor)
   : undefined;
 const selectedThemeName: string | undefined =
-  themeSelection.type === "name" ? themeSelection.name : undefined;
+  themeSelection.type !== "default" ? themeSelection.name : undefined;
 const selectedStyleName: string | undefined =
-  styleSelection.type === "named" ? styleSelection.name : undefined;
+  styleSelection.type !== "default" ? styleSelection.name : undefined;
 const themeCss: string | undefined =
   themeSelection.type === "name"
     ? themeCSS(themeSelection.name, themeSelection.light, themeSelection.dark)
-    : undefined;
+    : themeSelection.type === "all"
+      ? allThemesCSS(themeSelection.names)
+      : undefined;
 const themeColorInlineCss: string | undefined =
   fixedThemeColor && fixedThemeTone
     ? themeColorCSS(fixedThemeColor, fixedThemeTone, !selectedStyleName)
@@ -82,13 +86,33 @@ const themeColorInlineCss: string | undefined =
 const themeStyleCss: string | undefined =
   styleSelection.type === "named"
     ? styleCSS(styleSelection.name, styleSelection.style)
-    : undefined;
+    : styleSelection.type === "all"
+      ? allStylesCSS(styleSelection.names)
+      : undefined;
 const lightThemeColor: string | undefined =
   resolvedThemeColor ??
-  (themeSelection.type === "name" ? themeBG(themeSelection.light) : undefined);
+  (themeSelection.type !== "default"
+    ? themeBG(themeSelection.light)
+    : undefined);
 const darkThemeColor: string | undefined =
   resolvedThemeColor ??
-  (themeSelection.type === "name" ? themeBG(themeSelection.dark) : undefined);
+  (themeSelection.type !== "default"
+    ? themeBG(themeSelection.dark)
+    : undefined);
+const allThemeData: string | undefined =
+  themeSelection.type === "all"
+    ? JSON.stringify({
+        names: themeSelection.names,
+        colors: themeBackgrounds(themeSelection.names),
+        themeColor: resolvedThemeColor,
+      }).replace(/</g, "\\u003c")
+    : undefined;
+const allStyleData: string | undefined =
+  styleSelection.type === "all"
+    ? JSON.stringify({
+        names: styleSelection.names,
+      }).replace(/</g, "\\u003c")
+    : undefined;
 const jsonLd: string | undefined = data
   ? JSON.stringify(data).replace(/</g, "\\u003c")
   : undefined;
@@ -129,6 +153,158 @@ const i18n: string | undefined =
 
     {themeCss && <style is:inline set:html={themeCss} />}
     {themeStyleCss && <style is:inline set:html={themeStyleCss} />}
+    {allThemeData && (
+      <script
+          id="all-theme-data"
+          type="application/json"
+          is:inline
+          set:html={allThemeData}
+          />
+  )}
+    {allStyleData && (
+      <script
+          id="all-style-data"
+          type="application/json"
+          is:inline
+          set:html={allStyleData}
+          />
+  )}
+    <script is:inline>
+    (() => {
+      const root = document.documentElement;
+      const dataElement = document.getElementById("all-theme-data");
+      if (!dataElement) return;
+
+      try {
+        const payload = JSON.parse(dataElement.textContent ?? "{}");
+        const names = Array.isArray(payload.names)
+          ? payload.names.filter(
+              (name) => typeof name === "string" && Boolean(name.trim()),
+            )
+          : [];
+        if (!names.length) return;
+
+        const colors =
+          payload.colors && typeof payload.colors === "object"
+            ? payload.colors
+            : {};
+        const fixedColor =
+          typeof payload.themeColor === "string" && payload.themeColor
+            ? payload.themeColor
+            : null;
+        const isKnown = (name) => names.includes(name);
+        let current = names[0];
+
+        try {
+          const saved = localStorage.getItem("gh-profile-site-theme");
+          if (saved && isKnown(saved)) current = saved;
+        } catch {
+          // pass
+        }
+
+        const syncMeta = () => {
+          const themeMeta = document.querySelector('meta[name="theme-color"]');
+          if (!(themeMeta instanceof HTMLMetaElement)) return;
+
+          const entry = colors[current] ?? {};
+          const light = fixedColor ?? entry.light;
+          const dark = fixedColor ?? entry.dark ?? light;
+          if (light) themeMeta.dataset.light = light;
+          if (dark) themeMeta.dataset.dark = dark;
+
+          const color = root.classList.contains("dark") ? dark : light;
+          if (color) themeMeta.content = color;
+        };
+
+        const applyTheme = (name, persist = false) => {
+          if (!isKnown(name)) return;
+          current = name;
+          root.dataset.siteTheme = name;
+          syncMeta();
+
+          if (persist) {
+            try {
+              localStorage.setItem("gh-profile-site-theme", name);
+            } catch {
+              // pass
+            }
+          }
+
+          window.dispatchEvent(
+            new CustomEvent("site-theme-change", {
+              detail: { theme: name },
+            }),
+          );
+        };
+
+        applyTheme(current);
+        window.addEventListener("site-theme-select", (event) => {
+          const theme = event?.detail?.theme;
+          if (typeof theme === "string") applyTheme(theme, true);
+        });
+        window.addEventListener("readme-theme-change", syncMeta);
+        window.addEventListener("pageshow", syncMeta);
+      } catch (error) {
+        console.error("Failed to initialize all-theme mode:", error);
+      }
+    })();
+    </script>
+    <script is:inline>
+    (() => {
+      const root = document.documentElement;
+      const dataElement = document.getElementById("all-style-data");
+      if (!dataElement) return;
+
+      try {
+        const payload = JSON.parse(dataElement.textContent ?? "{}");
+        const names = Array.isArray(payload.names)
+          ? payload.names.filter(
+              (name) => typeof name === "string" && Boolean(name.trim()),
+            )
+          : [];
+        if (!names.length) return;
+
+        const isKnown = (name) => names.includes(name);
+        let current = names[0];
+
+        try {
+          const saved = localStorage.getItem("gh-profile-site-style");
+          if (saved && isKnown(saved)) current = saved;
+        } catch {
+          // pass
+        }
+
+        const applyStyle = (name, persist = false) => {
+          if (!isKnown(name)) return;
+          current = name;
+          root.dataset.themeStyle = name;
+
+          if (persist) {
+            try {
+              localStorage.setItem("gh-profile-site-style", name);
+            } catch {
+              // pass
+            }
+          }
+
+          window.dispatchEvent(
+            new CustomEvent("site-style-change", {
+              detail: { style: name },
+            }),
+          );
+        };
+
+        applyStyle(current);
+        window.addEventListener("site-style-select", (event) => {
+          const style = event?.detail?.style;
+          if (typeof style === "string") applyStyle(style, true);
+        });
+        window.addEventListener("pageshow", () => applyStyle(current));
+      } catch (error) {
+        console.error("Failed to initialize all-style mode:", error);
+      }
+    })();
+    </script>
     {i18n && (
       <script
           id="i18n-data"
@@ -192,6 +368,29 @@ const i18n: string | undefined =
 
         const transBase = String(payload.transBase ?? "");
         const transCache = new Map([[src.localeNorm, Promise.resolve(src)]]);
+        const readmeTemplateCache = new Map();
+
+        const compileReadmeTemplate = (translation) => {
+          const localeKey = translation?.localeNorm;
+          if (!localeKey || readmeTemplateCache.has(localeKey)) return;
+
+          const template = document.createElement("template");
+          template.innerHTML = translation.readmeHTML;
+          readmeTemplateCache.set(localeKey, template);
+        };
+
+        const scheduleReadmeTemplate = (translation) => {
+          if (!translation?.localeNorm) return;
+
+          const compile = () => compileReadmeTemplate(translation);
+          if ("requestIdleCallback" in window) {
+            window.requestIdleCallback(compile, { timeout: 1200 });
+          } else {
+            setTimeout(compile, 0);
+          }
+        };
+
+        scheduleReadmeTemplate(src);
 
         const localeCache = new Map();
         const localeInfo = (locale) => {
@@ -299,10 +498,12 @@ const i18n: string | undefined =
               ) {
                 throw new Error("Invalid translation payload");
               }
-              return {
+              const normalizedTranslation = {
                 ...translation,
                 localeNorm: entry.localeNorm,
               };
+              scheduleReadmeTemplate(normalizedTranslation);
+              return normalizedTranslation;
             })
             .catch((error) => {
               transCache.delete(entry.localeNorm);
@@ -312,6 +513,48 @@ const i18n: string | undefined =
 
           transCache.set(entry.localeNorm, request);
           return request;
+        };
+
+        const followingLocale = (currentNorm) => {
+          const currentIndex = locales.findIndex(
+            ({ localeNorm: entryNorm }) => entryNorm === currentNorm,
+          );
+          return locales[(currentIndex + 1) % locales.length] ?? srcEntry;
+        };
+
+        const warmFollowingLocale = (currentNorm) => {
+          const next = followingLocale(currentNorm);
+          if (next.localeNorm !== src.localeNorm) {
+            void loadTrans(next);
+          }
+        };
+
+        const warmRemainingTranslations = (currentNorm) => {
+          const queue = locales.filter(
+            ({ localeNorm: entryNorm }) =>
+              entryNorm !== currentNorm &&
+              entryNorm !== src.localeNorm &&
+              entryNorm !== followingLocale(currentNorm).localeNorm,
+          );
+
+          const warmNext = () => {
+            const entry = queue.shift();
+            if (!entry) return;
+
+            void loadTrans(entry).finally(() => {
+              if ("requestIdleCallback" in window) {
+                window.requestIdleCallback(warmNext, { timeout: 1500 });
+              } else {
+                setTimeout(warmNext, 16);
+              }
+            });
+          };
+
+          if ("requestIdleCallback" in window) {
+            window.requestIdleCallback(warmNext, { timeout: 1500 });
+          } else {
+            setTimeout(warmNext, 0);
+          }
         };
 
         const applyTrans = (translation, isReplaceReadme = false) => {
@@ -339,7 +582,15 @@ const i18n: string | undefined =
           const readme = document.querySelector("[data-i18n-readme]");
           if (readme && isReplaceReadme) {
             window.dispatchEvent(new Event("i18n-before-readme"));
-            readme.innerHTML = translation.readmeHTML;
+
+            const template = readmeTemplateCache.get(translation.localeNorm);
+            if (template instanceof HTMLTemplateElement) {
+              readme.replaceChildren(template.content.cloneNode(true));
+            } else {
+              readme.innerHTML = translation.readmeHTML;
+              scheduleReadmeTemplate(translation);
+            }
+
             window.dispatchEvent(
               new CustomEvent("i18n-toggle-readme", {
                 detail: { locale },
@@ -357,10 +608,7 @@ const i18n: string | undefined =
           // pass
         }
 
-        const findInitLocale = () => {
-          const saved = localeMatch(savedLocale);
-          if (saved) return saved;
-
+        const findBrowserLocale = () => {
           const browserLocales =
             Array.isArray(navigator.languages) && navigator.languages.length
               ? navigator.languages
@@ -371,8 +619,16 @@ const i18n: string | undefined =
             if (matched) return matched;
           }
 
-          return localeMatch(payload.defLanguage) ?? srcEntry;
+          return undefined;
         };
+
+        const savedLocaleEntry = () => localeMatch(savedLocale);
+
+        const findInitLocale = () =>
+          savedLocaleEntry() ??
+          findBrowserLocale() ??
+          localeMatch(payload.defLanguage) ??
+          srcEntry;
 
         let selectedLocaleNorm = src.localeNorm;
         let selectionRun = 0;
@@ -385,6 +641,7 @@ const i18n: string | undefined =
 
           const run = ++selectionRun;
           selectedLocaleNorm = entry.localeNorm;
+          warmFollowingLocale(entry.localeNorm);
 
           if (persist) {
             savedLocale = entry.localeNorm;
@@ -425,6 +682,7 @@ const i18n: string | undefined =
           persist: false,
           replaceReadme: !isInitSrc,
         });
+        warmRemainingTranslations(initialEntry.localeNorm);
 
         window.addEventListener("i18n-toggle", () => {
           const curIdx = locales.findIndex(
@@ -437,7 +695,27 @@ const i18n: string | undefined =
             replaceReadme: true,
           });
         });
+
+        const followBrowserLocale = () => {
+          if (savedLocaleEntry()) return false;
+
+          const next =
+            findBrowserLocale() ?? localeMatch(payload.defLanguage) ?? srcEntry;
+
+          if (next.localeNorm === selectedLocaleNorm) return false;
+
+          void selectLocale(next, {
+            persist: false,
+            replaceReadme: true,
+          });
+          return true;
+        };
+
+        window.addEventListener("languagechange", followBrowserLocale);
+
         window.addEventListener("pageshow", () => {
+          if (followBrowserLocale()) return;
+
           const current = localeMap.get(selectedLocaleNorm) ?? srcEntry;
           const applied = localeNorm(root.dataset.appliedLocale);
           if (applied && applied !== current.localeNorm) {

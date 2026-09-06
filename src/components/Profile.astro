@@ -3,6 +3,8 @@ import OrgBadges from "../components/LinkOrgBadges.astro";
 import IconLinks from "../components/LinkSiteIcons.astro";
 import ProfileAvatar from "../components/ProfileAvatar.astro";
 import ToggleLocale from "../components/ToggleLocale.astro";
+import ToggleSiteStyle from "../components/ToggleSiteStyle.astro";
+import ToggleSiteTheme from "../components/ToggleSiteTheme.astro";
 import ToggleTheme from "../components/ToggleTheme.astro";
 import {
   githubAvatarUrl,
@@ -16,6 +18,7 @@ import { fetchAvatar } from "../lib/fav";
 import { fetchOrgs } from "../lib/gh";
 import { getIconLinks, idUrls } from "../lib/links";
 import { getTranslations } from "../lib/profile";
+import { resolveStyle, type Style } from "../lib/style";
 import { resolveTheme, resolveThemeColor, type ThemeType } from "../lib/theme";
 
 const {
@@ -29,10 +32,13 @@ const {
   style,
 } = siteConfig;
 const themeType: ThemeType = resolveTheme(theme);
+const styleType: Style = resolveStyle(style);
 const resolvedThemeColor: string | undefined = resolveThemeColor(themeColor);
 const isToggleTheme: boolean = !(
   themeType.type === "default" && resolvedThemeColor
 );
+const isToggleSiteTheme: boolean = themeType.type === "all";
+const isToggleSiteStyle: boolean = styleType.type === "all";
 const isToggleLocale: boolean = locales.length > 1;
 const [profileSrc, favUrl, iconLinks, orgBadges] = await Promise.all([
   getTranslations(localeSrc),
@@ -89,8 +95,13 @@ const structData = {
   <main
     class="content-shell relative mx-auto min-h-screen max-w-4xl px-5 py-10 sm:px-8 sm:py-16"
   >
-    {(isToggleTheme || isToggleLocale) && (
+    {(isToggleSiteTheme ||
+        isToggleSiteStyle ||
+        isToggleTheme ||
+        isToggleLocale) && (
         <div class="profile-controls">
+          {isToggleSiteTheme && <ToggleSiteTheme />}
+          {isToggleSiteStyle && <ToggleSiteStyle />}
           {isToggleTheme && <ToggleTheme />}
           {isToggleLocale && <ToggleLocale />}
         </div>

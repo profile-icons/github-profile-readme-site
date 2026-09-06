@@ -1,0 +1,72 @@
+<button
+  id="site-style-toggle"
+  type="button"
+  class="site-style-toggle"
+  aria-label="Switch style"
+>
+  <span class="site-style-toggle-symbol" aria-hidden="true">✦</span>
+  <span class="site-style-toggle-tooltip" aria-hidden="true">
+    <span data-site-style-tooltip></span>
+  </span>
+</button>
+
+<script>
+const button: HTMLElement | null = document.getElementById("site-style-toggle");
+const root: HTMLElement = document.documentElement;
+const dataElement: HTMLElement | null =
+  document.getElementById("all-style-data");
+
+if (button instanceof HTMLButtonElement && dataElement) {
+  try {
+    const payload: { names?: unknown } = JSON.parse(
+      dataElement.textContent ?? "{}",
+    );
+
+    const names: string[] = Array.isArray(payload.names)
+      ? payload.names.filter(
+          (name: unknown): name is string =>
+            typeof name === "string" && Boolean(name.trim()),
+        )
+      : [];
+
+    const tooltip: HTMLElement | null = button.querySelector(
+      "[data-site-style-tooltip]",
+    );
+
+    const syncLabel = (): void => {
+      const current: string = root.dataset.themeStyle ?? names[0] ?? "";
+      const label: string = current.toLowerCase();
+
+      button.setAttribute(
+        "aria-label",
+        label ? `Switch style. Current style: ${label}.` : "Switch style",
+      );
+
+      if (tooltip) tooltip.textContent = label;
+    };
+
+    syncLabel();
+
+    button.addEventListener("click", (): void => {
+      const first: string | undefined = names[0];
+      if (!first) return;
+
+      const current: string = root.dataset.themeStyle ?? first;
+      const currentIndex: number = names.indexOf(current);
+
+      const next: string = names[(currentIndex + 1) % names.length] ?? first;
+
+      window.dispatchEvent(
+        new CustomEvent("site-style-select", {
+          detail: { style: next },
+        }),
+      );
+    });
+
+    window.addEventListener("site-style-change", syncLabel);
+    window.addEventListener("pageshow", syncLabel);
+  } catch (error) {
+    console.error("Failed to initialize style switcher:", error);
+  }
+}
+</script>

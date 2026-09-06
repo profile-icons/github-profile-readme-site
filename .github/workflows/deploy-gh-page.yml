@@ -40,7 +40,7 @@ jobs:
         run: npm ci
 
       - name: Check
-        run: npm run quality
+        run: npm run verify
 
       - name: i18n
         run: npm run i18n
