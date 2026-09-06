@@ -4,7 +4,28 @@
   class="site-theme-toggle"
   aria-label="Switch theme"
 >
-  <span class="site-theme-toggle-symbol" aria-hidden="true">∀</span>
+  <span class="site-theme-toggle-symbol" aria-hidden="true">
+    <svg
+      viewBox="0 0 24 24"
+      width="18"
+      height="18"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="2"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      focusable="false"
+    >
+      <title>Theme palette</title>
+      <circle cx="13.5" cy="6.5" r=".5" fill="currentColor" stroke="none" />
+      <circle cx="17.5" cy="10.5" r=".5" fill="currentColor" stroke="none" />
+      <circle cx="8.5" cy="7.5" r=".5" fill="currentColor" stroke="none" />
+      <circle cx="6.5" cy="12.5" r=".5" fill="currentColor" stroke="none" />
+      <path
+        d="M12 2a10 10 0 0 0 0 20c1.1 0 2-.9 2-2 0-.5-.2-1-.6-1.4-.4-.4-.6-.9-.6-1.4 0-1.1.9-2 2-2H17a5 5 0 0 0 5-5c0-4.4-4.5-8.2-10-8.2Z"
+      />
+    </svg>
+  </span>
   <span class="site-theme-toggle-tooltip" aria-hidden="true">
     <span data-site-theme-tooltip></span>
   </span>
@@ -33,7 +54,7 @@ if (button instanceof HTMLButtonElement && dataElement) {
 
     const syncLabel = (): void => {
       const current: string = root.dataset.siteTheme ?? names[0] ?? "";
-      const label: string = current.toLowerCase();
+      const label: string = `theme: ${current.toLowerCase()}`;
       button.setAttribute(
         "aria-label",
         label ? `Switch theme. Current theme: ${label}.` : "Switch theme",
